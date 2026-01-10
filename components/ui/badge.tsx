@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+import { ReactNode, MouseEventHandler } from "react";
 
 interface BadgeProps {
   children: ReactNode;
   variant?: "default" | "success" | "warning" | "danger" | "info";
   className?: string;
+  onClick?: MouseEventHandler<HTMLSpanElement>;
 }
 
-export function Badge({ children, variant = "default", className }: BadgeProps) {
+export function Badge({ children, variant = "default", className, onClick }: BadgeProps) {
   return (
     <span
       className={cn(
@@ -19,8 +20,10 @@ export function Badge({ children, variant = "default", className }: BadgeProps) 
           "bg-red-500/10 text-red-400": variant === "danger",
           "bg-blue-500/10 text-blue-400": variant === "info",
         },
+        onClick && "cursor-pointer",
         className
       )}
+      onClick={onClick}
     >
       {children}
     </span>
