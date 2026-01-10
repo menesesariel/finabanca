@@ -429,7 +429,7 @@ export default function ReportsPage() {
               ) : (
                 <DailyChart
                   data={dailyData}
-                  averageDaily={monthStats.averageDaily}
+                  averageDaily={monthStats.averageDailyCRC}
                   onDayClick={handleDayClick}
                 />
               )}
