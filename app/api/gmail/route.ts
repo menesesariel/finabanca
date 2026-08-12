@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { listBankEmails } from "@/lib/gmail";
 import { parseTransactionEmail } from "@/lib/parsers";
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

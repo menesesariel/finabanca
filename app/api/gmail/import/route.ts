@@ -5,6 +5,10 @@ import { listBankEmails } from "@/lib/gmail";
 import { parseTransactionEmail } from "@/lib/parsers";
 import { formatDateForGmail } from "@/lib/date-ranges";
 
+// Historical imports fetch many full email bodies; give the function room so it
+// doesn't hit the default serverless timeout for heavy accounts.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
