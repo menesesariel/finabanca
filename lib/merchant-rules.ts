@@ -1,4 +1,4 @@
-import { CategoryId } from "./types";
+import { CategoryId, UserRule } from "./types";
 
 /**
  * Deterministic merchant -> category rules.
@@ -217,8 +217,8 @@ const RULES: MerchantRule[] = [
   },
 ];
 
-/** Normalize a merchant name: uppercase off, strip accents, collapse spaces. */
-function normalize(merchant: string): string {
+/** Normalize a merchant name: lowercase, strip accents, collapse spaces. */
+export function normalizeMerchant(merchant: string): string {
   return ` ${merchant
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -233,12 +233,12 @@ export interface MerchantMatch {
 }
 
 /**
- * Try to categorize a merchant using the deterministic rules.
+ * Try to categorize a merchant using the built-in deterministic rules.
  * Returns a high-confidence match, or null when nothing matches.
  */
 export function matchMerchantCategory(merchant: string): MerchantMatch | null {
   if (!merchant) return null;
-  const haystack = normalize(merchant);
+  const haystack = normalizeMerchant(merchant);
 
   for (const rule of RULES) {
     for (const keyword of rule.keywords) {
@@ -249,4 +249,64 @@ export function matchMerchantCategory(merchant: string): MerchantMatch | null {
   }
 
   return null;
+}
+
+/**
+ * Try to categorize a merchant using the user's own rules. User rules win over
+ * the built-in ones (confidence 100). The most recently created matching rule
+ * takes precedence.
+ */
+export function matchUserRules(
+  merchant: string,
+  rules: UserRule[]
+): MerchantMatch | null {
+  if (!merchant || rules.length === 0) return null;
+  const haystack = normalizeMerchant(merchant);
+
+  // Prefer more specific (longer) patterns so "montezuma condominio" beats
+  // a broader "montezuma" if both exist.
+  const sorted = [...rules].sort((a, b) => b.pattern.length - a.pattern.length);
+  for (const rule of sorted) {
+    if (rule.pattern && haystack.includes(rule.pattern)) {
+      return { categoryId: rule.categoryId, confidence: 100 };
+    }
+  }
+  return null;
+}
+
+// Noise tokens that make a poor rule keyword on their own.
+const KEYWORD_STOPWORDS = new Set([
+  "pago",
+  "compra",
+  "com",
+  "sa",
+  "srl",
+  "cr",
+  "crc",
+  "usd",
+  "san",
+  "jose",
+  "costa",
+  "rica",
+  "the",
+  "de",
+  "la",
+  "el",
+]);
+
+/**
+ * Suggest a keyword to seed a user rule from a merchant name: the first
+ * meaningful word (>= 3 chars, not a number, not a stopword). Falls back to the
+ * full normalized merchant.
+ */
+export function suggestKeyword(merchant: string): string {
+  const normalized = normalizeMerchant(merchant).trim();
+  const words = normalized.split(" ");
+  for (const word of words) {
+    const clean = word.replace(/[^a-z0-9]/g, "");
+    if (clean.length >= 3 && !/^\d+$/.test(clean) && !KEYWORD_STOPWORDS.has(clean)) {
+      return clean;
+    }
+  }
+  return normalized;
 }

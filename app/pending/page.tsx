@@ -7,7 +7,11 @@ import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TransactionList } from "@/components/transactions/transaction-list";
-import { getPendingCategorization, setTransactionCategory } from "@/lib/db";
+import {
+  getPendingCategorization,
+  setTransactionCategory,
+  getUserRules,
+} from "@/lib/db";
 import { categorizeMerchant } from "@/lib/import-utils";
 import { Transaction } from "@/lib/types";
 import { AlertCircle, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
@@ -37,16 +41,22 @@ export default function PendingPage() {
 
     // Snapshot the current pending list so re-classification is deterministic.
     const pending = [...transactions];
+    const userRules = await getUserRules();
     for (let i = 0; i < pending.length; i++) {
       const t = pending[i];
       setProgress({ current: i + 1, total: pending.length });
       try {
-        const { categoryId, confidence } = await categorizeMerchant(
+        const { categoryId, confidence, usedLlm } = await categorizeMerchant(
           t.merchant,
           t.amount,
-          t.currency
+          t.currency,
+          userRules
         );
         await setTransactionCategory(t.id, categoryId, confidence);
+        // Only throttle when we actually hit the LLM API.
+        if (usedLlm && i < pending.length - 1) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
       } catch (error) {
         console.error("Re-classify error:", t.merchant, error);
       }

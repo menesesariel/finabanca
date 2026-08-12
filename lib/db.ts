@@ -1,7 +1,7 @@
 "use client";
 
 import { openDB, DBSchema, IDBPDatabase } from "idb";
-import { Transaction, CategoryId } from "./types";
+import { Transaction, CategoryId, UserRule } from "./types";
 
 interface ExpenseTrackerDB extends DBSchema {
   transactions: {
@@ -21,27 +21,37 @@ interface ExpenseTrackerDB extends DBSchema {
     key: string;
     value: { emailId: string; processedAt: string };
   };
+  userRules: {
+    key: string;
+    value: UserRule;
+  };
 }
+
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<ExpenseTrackerDB>> | null = null;
 
 function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<ExpenseTrackerDB>("expense-tracker", 1, {
-      upgrade(db) {
-        // Transactions store
-        const transactionStore = db.createObjectStore("transactions", {
-          keyPath: "id",
-        });
-        transactionStore.createIndex("by-date", "transactionDate");
-        transactionStore.createIndex("by-category", "categoryId");
-        transactionStore.createIndex("by-email", "emailId");
+    dbPromise = openDB<ExpenseTrackerDB>("expense-tracker", DB_VERSION, {
+      upgrade(db, oldVersion) {
+        // v1: initial stores
+        if (oldVersion < 1) {
+          const transactionStore = db.createObjectStore("transactions", {
+            keyPath: "id",
+          });
+          transactionStore.createIndex("by-date", "transactionDate");
+          transactionStore.createIndex("by-category", "categoryId");
+          transactionStore.createIndex("by-email", "emailId");
 
-        // Settings store
-        db.createObjectStore("settings", { keyPath: "key" });
+          db.createObjectStore("settings", { keyPath: "key" });
+          db.createObjectStore("processedEmails", { keyPath: "emailId" });
+        }
 
-        // Processed emails store (to avoid duplicates)
-        db.createObjectStore("processedEmails", { keyPath: "emailId" });
+        // v2: user-defined categorization rules
+        if (oldVersion < 2) {
+          db.createObjectStore("userRules", { keyPath: "pattern" });
+        }
       },
     });
   }
@@ -164,6 +174,31 @@ export async function getSetting<T>(key: string): Promise<T | undefined> {
 export async function setSetting<T>(key: string, value: T): Promise<void> {
   const db = await getDB();
   await db.put("settings", { key, value } as unknown as { key: string });
+}
+
+// User-defined categorization rules
+export async function getUserRules(): Promise<UserRule[]> {
+  const db = await getDB();
+  return db.getAll("userRules");
+}
+
+export async function addUserRule(
+  pattern: string,
+  categoryId: CategoryId
+): Promise<void> {
+  const clean = pattern.trim().toLowerCase();
+  if (!clean) return;
+  const db = await getDB();
+  await db.put("userRules", {
+    pattern: clean,
+    categoryId,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteUserRule(pattern: string): Promise<void> {
+  const db = await getDB();
+  await db.delete("userRules", pattern);
 }
 
 /**

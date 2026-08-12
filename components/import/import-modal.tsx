@@ -8,7 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { KNOWN_BANK_SENDERS, BankSender } from "@/lib/known-senders";
 import { DATE_RANGES, getDateRangeById } from "@/lib/date-ranges";
-import { addTransaction, isEmailProcessed, markEmailProcessed } from "@/lib/db";
+import {
+  addTransaction,
+  isEmailProcessed,
+  markEmailProcessed,
+  getUserRules,
+} from "@/lib/db";
 import { buildTransactionFromParsed } from "@/lib/import-utils";
 import { cn } from "@/lib/utils";
 import {
@@ -119,7 +124,9 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
           senders: selectedSenders,
           startDate: start.toISOString(),
           endDate: end.toISOString(),
-          maxResults: 500,
+          // High cap so long ranges (e.g. 6 months) aren't truncated to the
+          // most-recent 500 emails. The date range still bounds the results.
+          maxResults: 2000,
         }),
       });
 
@@ -148,6 +155,9 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
     setStep("importing");
     setProgress({ current: 0, total: validEmails.length });
 
+    // Load the user's rules once for the whole batch.
+    const userRules = await getUserRules();
+
     let imported = 0;
     let skipped = 0;
     let failed = 0;
@@ -170,15 +180,18 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
           continue;
         }
 
-        // Categorize with the LLM and build the transaction (shared helper).
-        const transaction = await buildTransactionFromParsed(tx);
+        // Categorize (user rules -> built-in rules -> LLM) and build it.
+        const { transaction, usedLlm } = await buildTransactionFromParsed(
+          tx,
+          userRules
+        );
 
         await addTransaction(transaction);
         await markEmailProcessed(email.emailId);
         imported++;
 
-        // Small delay to respect rate limits
-        if (i < validEmails.length - 1) {
+        // Only throttle when we actually hit the LLM API (rule matches are free).
+        if (usedLlm && i < validEmails.length - 1) {
           await new Promise((r) => setTimeout(r, 200));
         }
       } catch (err) {

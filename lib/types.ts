@@ -23,6 +23,17 @@ export interface Category {
   color: string;
 }
 
+/**
+ * A user-defined categorization rule: any merchant whose (normalized) name
+ * contains `pattern` is classified as `categoryId`. Checked before the built-in
+ * rules and the LLM, so users can teach the app (e.g. "montezuma" -> housing).
+ */
+export interface UserRule {
+  pattern: string;
+  categoryId: CategoryId;
+  createdAt: string;
+}
+
 export interface Transaction {
   id: string;
   amount: number;

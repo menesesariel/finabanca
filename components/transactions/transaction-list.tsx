@@ -4,18 +4,20 @@ import { useState } from "react";
 import { Transaction, CategoryId } from "@/lib/types";
 import { CATEGORIES, CATEGORY_LIST } from "@/lib/categories";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
-import { updateTransactionCategory } from "@/lib/db";
+import { updateTransactionCategory, addUserRule } from "@/lib/db";
+import { suggestKeyword } from "@/lib/merchant-rules";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { 
-  CreditCard, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  CreditCard,
+  AlertCircle,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  X
+  Sparkles,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,11 @@ export function TransactionList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("other");
+  const [rulePrompt, setRulePrompt] = useState<{
+    merchant: string;
+    categoryId: CategoryId;
+    keyword: string;
+  } | null>(null);
 
   const filteredTransactions = showPending
     ? transactions.filter(t => t.confidence < 70 && !t.isManuallyClassified)
@@ -47,13 +54,29 @@ export function TransactionList({
     );
   }
 
-  const handleCategoryUpdate = async (transactionId: string) => {
-    await updateTransactionCategory(transactionId, selectedCategory);
+  const handleCategoryUpdate = async (transaction: Transaction) => {
+    const categoryId = selectedCategory;
+    await updateTransactionCategory(transaction.id, categoryId);
     setEditingId(null);
+    // Offer to remember this as a rule for similar merchants next time.
+    setRulePrompt({
+      merchant: transaction.merchant,
+      categoryId,
+      keyword: suggestKeyword(transaction.merchant),
+    });
     onUpdate?.();
   };
 
+  const handleCreateRule = async () => {
+    if (!rulePrompt) return;
+    await addUserRule(rulePrompt.keyword, rulePrompt.categoryId);
+    setRulePrompt(null);
+  };
+
+  const promptCategory = rulePrompt ? CATEGORIES[rulePrompt.categoryId] : null;
+
   return (
+    <>
     <div className="space-y-3">
       {filteredTransactions.map((transaction, index) => {
         const category = CATEGORIES[transaction.categoryId];
@@ -142,7 +165,7 @@ export function TransactionList({
                           }))}
                           className="flex-1"
                         />
-                        <Button size="sm" onClick={() => handleCategoryUpdate(transaction.id)}>
+                        <Button size="sm" onClick={() => handleCategoryUpdate(transaction)}>
                           ✓
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
@@ -185,6 +208,64 @@ export function TransactionList({
         );
       })}
     </div>
+
+      {/* "Remember this rule?" prompt after a manual re-categorization */}
+      {rulePrompt && promptCategory && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-2rem)] max-w-md">
+          <Card className="p-4 shadow-2xl border-primary-500/30">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-primary-500/20 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-primary-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">
+                  ¿Recordar esta regla?
+                </p>
+                <p className="text-dark-400 text-xs mt-1">
+                  Los comercios que contengan esta palabra se clasificarán como{" "}
+                  <span className="text-white">
+                    {promptCategory.icon} {promptCategory.name}
+                  </span>
+                  .
+                </p>
+                <input
+                  type="text"
+                  value={rulePrompt.keyword}
+                  onChange={(e) =>
+                    setRulePrompt((prev) =>
+                      prev ? { ...prev, keyword: e.target.value } : prev
+                    )
+                  }
+                  className="mt-2 w-full px-3 py-2 rounded-lg bg-dark-800 border border-dark-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setRulePrompt(null)}
+                  >
+                    Ahora no
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleCreateRule}
+                    disabled={!rulePrompt.keyword.trim()}
+                  >
+                    Crear regla
+                  </Button>
+                </div>
+              </div>
+              <button
+                onClick={() => setRulePrompt(null)}
+                className="text-dark-400 hover:text-white shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </>
   );
 }
 

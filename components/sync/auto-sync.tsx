@@ -48,7 +48,7 @@ export function AutoSync({
         // Skip if parsing failed
         if (!email.parsed?.success || !email.parsed?.transaction) continue;
 
-        const transaction = await buildTransactionFromParsed(
+        const { transaction } = await buildTransactionFromParsed(
           email.parsed.transaction
         );
 

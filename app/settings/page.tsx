@@ -5,21 +5,43 @@ import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  User, 
-  Mail, 
-  Database, 
-  Trash2, 
-  LogOut, 
+import {
+  User,
+  Mail,
+  Database,
+  Trash2,
+  LogOut,
   Shield,
   Github,
-  ExternalLink
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getUserRules, deleteUserRule } from "@/lib/db";
+import { CATEGORIES } from "@/lib/categories";
+import { UserRule } from "@/lib/types";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const [clearing, setClearing] = useState(false);
+  const [rules, setRules] = useState<UserRule[]>([]);
+
+  const loadRules = async () => {
+    try {
+      setRules(await getUserRules());
+    } catch (error) {
+      console.error("Error loading rules:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadRules();
+  }, []);
+
+  const handleDeleteRule = async (pattern: string) => {
+    await deleteUserRule(pattern);
+    loadRules();
+  };
 
   if (status === "loading") {
     return (
@@ -145,6 +167,55 @@ export default function SettingsPage() {
                   Esta acción no se puede deshacer
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Custom rules */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                Reglas personalizadas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rules.length === 0 ? (
+                <p className="text-dark-400 text-sm">
+                  Aún no tienes reglas. Cuando corrijas la categoría de una
+                  transacción, te ofreceremos crear una para clasificar
+                  automáticamente comercios similares la próxima vez.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {rules.map((rule) => {
+                    const category = CATEGORIES[rule.categoryId];
+                    return (
+                      <div
+                        key={rule.pattern}
+                        className="flex items-center justify-between gap-3 p-3 rounded-xl bg-dark-800 border border-dark-700"
+                      >
+                        <div className="min-w-0 flex items-center gap-2 text-sm">
+                          <span className="text-dark-400">Contiene</span>
+                          <span className="text-white font-mono truncate">
+                            «{rule.pattern}»
+                          </span>
+                          <span className="text-dark-400">→</span>
+                          <span className="text-white whitespace-nowrap">
+                            {category.icon} {category.name}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteRule(rule.pattern)}
+                          className="text-dark-400 hover:text-red-400 transition-colors shrink-0"
+                          aria-label="Eliminar regla"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 
