@@ -100,6 +100,26 @@ export async function updateTransactionCategory(
   }
 }
 
+/**
+ * Update a transaction's category from an automatic re-classification (rules or
+ * LLM). Unlike updateTransactionCategory, this keeps isManuallyClassified false
+ * so a low-confidence result can still land back in "pending".
+ */
+export async function setTransactionCategory(
+  id: string,
+  categoryId: CategoryId,
+  confidence: number
+): Promise<void> {
+  const db = await getDB();
+  const transaction = await db.get("transactions", id);
+  if (transaction) {
+    transaction.categoryId = categoryId;
+    transaction.confidence = confidence;
+    transaction.isManuallyClassified = false;
+    await db.put("transactions", transaction);
+  }
+}
+
 export async function deleteTransaction(id: string): Promise<void> {
   const db = await getDB();
   await db.delete("transactions", id);

@@ -4,16 +4,20 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/navbar";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { TransactionList } from "@/components/transactions/transaction-list";
-import { getPendingCategorization } from "@/lib/db";
+import { getPendingCategorization, setTransactionCategory } from "@/lib/db";
+import { categorizeMerchant } from "@/lib/import-utils";
 import { Transaction } from "@/lib/types";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
 
 export default function PendingPage() {
   const { status } = useSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reclassifying, setReclassifying] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   const loadData = async () => {
     try {
@@ -24,6 +28,32 @@ export default function PendingPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAutoClassify = async () => {
+    if (reclassifying || transactions.length === 0) return;
+    setReclassifying(true);
+    setProgress({ current: 0, total: transactions.length });
+
+    // Snapshot the current pending list so re-classification is deterministic.
+    const pending = [...transactions];
+    for (let i = 0; i < pending.length; i++) {
+      const t = pending[i];
+      setProgress({ current: i + 1, total: pending.length });
+      try {
+        const { categoryId, confidence } = await categorizeMerchant(
+          t.merchant,
+          t.amount,
+          t.currency
+        );
+        await setTransactionCategory(t.id, categoryId, confidence);
+      } catch (error) {
+        console.error("Re-classify error:", t.merchant, error);
+      }
+    }
+
+    await loadData();
+    setReclassifying(false);
   };
 
   useEffect(() => {
@@ -50,13 +80,30 @@ export default function PendingPage() {
 
       <main className="md:ml-64 p-4 md:p-8 pt-20 md:pt-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-white">
-            Pendientes de categorizar
-          </h1>
-          <p className="text-dark-400 mt-1">
-            Transacciones que la IA no pudo clasificar con confianza
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">
+              Pendientes de categorizar
+            </h1>
+            <p className="text-dark-400 mt-1">
+              Transacciones que la IA no pudo clasificar con confianza
+            </p>
+          </div>
+          {transactions.length > 0 && (
+            <Button onClick={handleAutoClassify} disabled={reclassifying}>
+              {reclassifying ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Clasificando {progress.current}/{progress.total}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Auto-clasificar
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* Alert */}

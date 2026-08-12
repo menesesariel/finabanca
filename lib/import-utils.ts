@@ -1,6 +1,7 @@
 "use client";
 
 import { CategoryId, Transaction } from "./types";
+import { matchMerchantCategory } from "./merchant-rules";
 
 export interface ParsedTransaction {
   merchant: string;
@@ -15,35 +16,51 @@ export interface ParsedTransaction {
 }
 
 /**
- * Categorize a parsed transaction with the LLM and build the full Transaction
- * object ready to store. Falls back to the "other" category if the LLM call
- * fails. Shared by the auto-sync loop and the manual import modal.
+ * Categorize a merchant: deterministic rules first (no LLM call for well-known
+ * merchants), then fall back to the AI categorizer. Never throws — returns the
+ * "other" category with a low confidence if everything fails. Shared by the
+ * import flow and the "auto-classify pending" action.
  */
-export async function buildTransactionFromParsed(
-  tx: ParsedTransaction
-): Promise<Transaction> {
-  let categoryId: CategoryId = "other";
-  let confidence = 50;
+export async function categorizeMerchant(
+  merchant: string,
+  amount?: number,
+  currency?: string
+): Promise<{ categoryId: CategoryId; confidence: number }> {
+  // 1) Deterministic rules first.
+  const ruleMatch = matchMerchantCategory(merchant);
+  if (ruleMatch) return ruleMatch;
 
+  // 2) AI categorizer for anything unknown.
   try {
     const response = await fetch("/api/categorize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        merchant: tx.merchant,
-        amount: tx.amount,
-        currency: tx.currency,
-      }),
+      body: JSON.stringify({ merchant, amount, currency }),
     });
 
     if (response.ok) {
       const data = await response.json();
-      categoryId = data.categoryId;
-      confidence = data.confidence;
+      return { categoryId: data.categoryId, confidence: data.confidence };
     }
   } catch {
-    // Keep the default category if the LLM call fails.
+    // Fall through to the default below.
   }
+
+  return { categoryId: "other", confidence: 50 };
+}
+
+/**
+ * Categorize a parsed transaction and build the full Transaction object ready
+ * to store. Shared by the auto-sync loop and the manual import modal.
+ */
+export async function buildTransactionFromParsed(
+  tx: ParsedTransaction
+): Promise<Transaction> {
+  const { categoryId, confidence } = await categorizeMerchant(
+    tx.merchant,
+    tx.amount,
+    tx.currency
+  );
 
   return {
     id: crypto.randomUUID(),
