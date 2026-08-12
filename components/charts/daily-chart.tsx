@@ -41,7 +41,9 @@ export function DailyChart({ data, currency = "CRC", averageDaily, onDayClick }:
   };
 
   return (
-    <div className="h-72">
+    <div className="flex flex-col">
+      {/* Fixed-height chart area so the caption below never overlaps it */}
+      <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
@@ -123,6 +125,7 @@ export function DailyChart({ data, currency = "CRC", averageDaily, onDayClick }:
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
       <p className="text-center text-dark-500 text-xs mt-2">
         Haz clic en una barra para ver las transacciones de ese día
       </p>

@@ -135,59 +135,20 @@ export async function markEmailProcessed(emailId: string): Promise<void> {
 // Settings operations
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDB();
-  const result = await db.get("settings", key);
-  return result as T | undefined;
+  const result = (await db.get("settings", key)) as
+    | { key: string; value: T }
+    | undefined;
+  return result?.value;
 }
 
 export async function setSetting<T>(key: string, value: T): Promise<void> {
   const db = await getDB();
-  await db.put("settings", { key, ...value } as unknown as { key: string });
+  await db.put("settings", { key, value } as unknown as { key: string });
 }
 
-// Stats
-export async function getMonthlyTotals(): Promise<Record<string, number>> {
-  const db = await getDB();
-  const transactions = await db.getAll("transactions");
-  
-  const totals: Record<string, number> = {};
-  
-  transactions.forEach((t) => {
-    const date = new Date(t.transactionDate);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    totals[monthKey] = (totals[monthKey] || 0) + t.amount;
-  });
-  
-  return totals;
-}
-
-export async function getCategoryTotals(): Promise<Record<CategoryId, number>> {
-  const db = await getDB();
-  const transactions = await db.getAll("transactions");
-  
-  const totals: Record<string, number> = {};
-  
-  transactions.forEach((t) => {
-    totals[t.categoryId] = (totals[t.categoryId] || 0) + t.amount;
-  });
-  
-  return totals as Record<CategoryId, number>;
-}
-
-export async function getThisMonthTotal(): Promise<number> {
-  const db = await getDB();
-  const transactions = await db.getAll("transactions");
-  
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  
-  return transactions
-    .filter((t) => new Date(t.transactionDate) >= startOfMonth)
-    .reduce((sum, t) => sum + t.amount, 0);
-}
-
-export async function getTransactionCount(): Promise<number> {
-  const db = await getDB();
-  const transactions = await db.getAll("transactions");
-  return transactions.length;
-}
+/**
+ * NOTE: currency-aware aggregations (monthly totals, category totals, "this
+ * month", etc.) live in `lib/stats.ts` and operate on the transaction list.
+ * They intentionally never sum amounts across different currencies.
+ */
 

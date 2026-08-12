@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { KNOWN_BANK_SENDERS, BankSender } from "@/lib/known-senders";
 import { DATE_RANGES, getDateRangeById } from "@/lib/date-ranges";
 import { addTransaction, isEmailProcessed, markEmailProcessed } from "@/lib/db";
-import { Transaction, CategoryId } from "@/lib/types";
+import { buildTransactionFromParsed } from "@/lib/import-utils";
 import { cn } from "@/lib/utils";
 import {
   X,
@@ -170,47 +170,8 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
           continue;
         }
 
-        // Categorize with LLM
-        let categoryId: CategoryId = "other";
-        let confidence = 50;
-
-        try {
-          const catResponse = await fetch("/api/categorize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              merchant: tx.merchant,
-              amount: tx.amount,
-              currency: tx.currency,
-            }),
-          });
-
-          if (catResponse.ok) {
-            const catData = await catResponse.json();
-            categoryId = catData.categoryId;
-            confidence = catData.confidence;
-          }
-        } catch {
-          // Use default category if LLM fails
-        }
-
-        // Create transaction
-        const transaction: Transaction = {
-          id: crypto.randomUUID(),
-          amount: tx.amount,
-          currency: tx.currency,
-          merchant: tx.merchant,
-          categoryId,
-          confidence,
-          isManuallyClassified: false,
-          transactionDate: tx.transactionDate,
-          authorizationCode: tx.authorizationCode,
-          reference: tx.reference,
-          cardLastFour: tx.cardLastFour,
-          bankSource: tx.bankSource,
-          emailId: tx.emailId,
-          createdAt: new Date().toISOString(),
-        };
+        // Categorize with the LLM and build the transaction (shared helper).
+        const transaction = await buildTransactionFromParsed(tx);
 
         await addTransaction(transaction);
         await markEmailProcessed(email.emailId);
@@ -233,7 +194,7 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"

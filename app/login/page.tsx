@@ -88,7 +88,7 @@ export default function LoginPage() {
 
           <div className="flex items-center gap-2 text-dark-400 text-sm">
             <Shield className="w-4 h-4" />
-            <span>Tus datos nunca salen de tu navegador</span>
+            <span>Tus transacciones se guardan solo en tu navegador</span>
           </div>
         </div>
       </div>

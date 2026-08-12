@@ -1,11 +1,19 @@
-export type CategoryId = 
+export type CategoryId =
   | "food"
-  | "transport"
-  | "entertainment"
-  | "shopping"
-  | "services"
-  | "health"
   | "supermarket"
+  | "transport"
+  | "fuel"
+  | "utilities"
+  | "housing"
+  | "health"
+  | "entertainment"
+  | "subscriptions"
+  | "shopping"
+  | "hardware"
+  | "personal_care"
+  | "education"
+  | "pets"
+  | "services"
   | "other";
 
 export interface Category {

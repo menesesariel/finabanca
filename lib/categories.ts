@@ -7,29 +7,35 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "🍔",
     color: "#f97316", // orange
   },
+  supermarket: {
+    id: "supermarket",
+    name: "Supermercado",
+    icon: "🛒",
+    color: "#eab308", // yellow
+  },
   transport: {
     id: "transport",
     name: "Transporte",
     icon: "🚗",
     color: "#3b82f6", // blue
   },
-  entertainment: {
-    id: "entertainment",
-    name: "Entretenimiento",
-    icon: "🎬",
-    color: "#a855f7", // purple
+  fuel: {
+    id: "fuel",
+    name: "Combustible",
+    icon: "⛽",
+    color: "#e11d48", // rose
   },
-  shopping: {
-    id: "shopping",
-    name: "Compras",
-    icon: "🛍️",
-    color: "#ec4899", // pink
+  utilities: {
+    id: "utilities",
+    name: "Servicios Públicos",
+    icon: "💡",
+    color: "#14b8a6", // teal
   },
-  services: {
-    id: "services",
-    name: "Servicios",
-    icon: "📱",
-    color: "#06b6d4", // cyan
+  housing: {
+    id: "housing",
+    name: "Vivienda / Alquiler",
+    icon: "🏠",
+    color: "#0ea5e9", // sky
   },
   health: {
     id: "health",
@@ -37,11 +43,53 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "💊",
     color: "#22c55e", // green
   },
-  supermarket: {
-    id: "supermarket",
-    name: "Supermercado",
-    icon: "🛒",
-    color: "#eab308", // yellow
+  entertainment: {
+    id: "entertainment",
+    name: "Entretenimiento",
+    icon: "🎬",
+    color: "#a855f7", // purple
+  },
+  subscriptions: {
+    id: "subscriptions",
+    name: "Suscripciones",
+    icon: "🔁",
+    color: "#8b5cf6", // violet
+  },
+  shopping: {
+    id: "shopping",
+    name: "Compras",
+    icon: "🛍️",
+    color: "#ec4899", // pink
+  },
+  hardware: {
+    id: "hardware",
+    name: "Ferretería",
+    icon: "🔧",
+    color: "#b45309", // amber-800
+  },
+  personal_care: {
+    id: "personal_care",
+    name: "Cuidado Personal",
+    icon: "💇",
+    color: "#d946ef", // fuchsia
+  },
+  education: {
+    id: "education",
+    name: "Educación",
+    icon: "🎓",
+    color: "#6366f1", // indigo
+  },
+  pets: {
+    id: "pets",
+    name: "Mascotas",
+    icon: "🐾",
+    color: "#84cc16", // lime
+  },
+  services: {
+    id: "services",
+    name: "Servicios",
+    icon: "📱",
+    color: "#06b6d4", // cyan
   },
   other: {
     id: "other",

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { addTransaction, isEmailProcessed, markEmailProcessed } from "@/lib/db";
-import { Transaction, CategoryId } from "@/lib/types";
+import { buildTransactionFromParsed } from "@/lib/import-utils";
 
 interface AutoSyncProps {
   intervalMinutes?: number;
@@ -11,23 +11,26 @@ interface AutoSyncProps {
   enabled?: boolean;
 }
 
-export function AutoSync({ 
-  intervalMinutes = 5, 
+export function AutoSync({
+  intervalMinutes = 5,
   onNewTransactions,
-  enabled = true 
+  enabled = true,
 }: AutoSyncProps) {
   const { data: session } = useSession();
-  const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [, setLastSync] = useState<Date | null>(null);
+
+  // Refs so the interval callback can be stable (no re-subscription loop):
+  // - syncingRef guards against overlapping runs without being an effect dep.
+  // - syncRef always points at the latest sync implementation.
+  const syncingRef = useRef(false);
+  const syncRef = useRef<() => Promise<void>>(async () => {});
 
   const sync = useCallback(async () => {
-    if (!session?.accessToken || syncing) return;
-
-    setSyncing(true);
+    if (!session?.accessToken || syncingRef.current) return;
+    syncingRef.current = true;
 
     try {
-      // Fetch recent emails (last 24 hours)
+      // Fetch recent emails
       const response = await fetch("/api/gmail?maxResults=20");
       const data = await response.json();
 
@@ -40,55 +43,14 @@ export function AutoSync({
 
       for (const email of data.emails || []) {
         // Skip if already processed
-        const alreadyProcessed = await isEmailProcessed(email.emailId);
-        if (alreadyProcessed) continue;
+        if (await isEmailProcessed(email.emailId)) continue;
 
         // Skip if parsing failed
         if (!email.parsed?.success || !email.parsed?.transaction) continue;
 
-        const parsedTx = email.parsed.transaction;
-
-        // Categorize with LLM
-        let categoryId: CategoryId = "other";
-        let confidence = 50;
-
-        try {
-          const catResponse = await fetch("/api/categorize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              merchant: parsedTx.merchant,
-              amount: parsedTx.amount,
-              currency: parsedTx.currency,
-            }),
-          });
-
-          if (catResponse.ok) {
-            const catData = await catResponse.json();
-            categoryId = catData.categoryId;
-            confidence = catData.confidence;
-          }
-        } catch {
-          // Use default category if LLM fails
-        }
-
-        // Create transaction
-        const transaction: Transaction = {
-          id: crypto.randomUUID(),
-          amount: parsedTx.amount,
-          currency: parsedTx.currency,
-          merchant: parsedTx.merchant,
-          categoryId,
-          confidence,
-          isManuallyClassified: false,
-          transactionDate: parsedTx.transactionDate,
-          authorizationCode: parsedTx.authorizationCode,
-          reference: parsedTx.reference,
-          cardLastFour: parsedTx.cardLastFour,
-          bankSource: parsedTx.bankSource,
-          emailId: parsedTx.emailId,
-          createdAt: new Date().toISOString(),
-        };
+        const transaction = await buildTransactionFromParsed(
+          email.parsed.transaction
+        );
 
         await addTransaction(transaction);
         await markEmailProcessed(email.emailId);
@@ -99,23 +61,32 @@ export function AutoSync({
 
       if (newCount > 0) {
         onNewTransactions?.(newCount);
-        
+
         // Show browser notification if permitted
-        if (Notification.permission === "granted") {
+        if (
+          typeof Notification !== "undefined" &&
+          Notification.permission === "granted"
+        ) {
           new Notification("ExpenseAI", {
-            body: `${newCount} nueva${newCount > 1 ? "s" : ""} transacción${newCount > 1 ? "es" : ""} importada${newCount > 1 ? "s" : ""}`,
-            icon: "/icon.png",
+            body: `${newCount} nueva${newCount > 1 ? "s" : ""} transacción${
+              newCount > 1 ? "es" : ""
+            } importada${newCount > 1 ? "s" : ""}`,
           });
         }
       }
     } catch (error) {
       console.error("Auto-sync error:", error);
     } finally {
-      setSyncing(false);
+      syncingRef.current = false;
     }
-  }, [session?.accessToken, syncing, onNewTransactions]);
+  }, [session?.accessToken, onNewTransactions]);
 
-  // Request notification permission
+  // Keep the ref pointing at the latest sync function.
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
+
+  // Request notification permission once.
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
@@ -124,35 +95,25 @@ export function AutoSync({
     }
   }, []);
 
-  // Setup interval
+  // Setup interval. Depends only on primitives, so it is NOT torn down and
+  // rebuilt every time a sync runs (which was causing repeated fetches).
   useEffect(() => {
-    if (!enabled || !session?.accessToken) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
-    }
+    if (!enabled || !session?.accessToken) return;
 
-    // Initial sync after 30 seconds
     const initialTimeout = setTimeout(() => {
-      sync();
-    }, 30000);
+      syncRef.current();
+    }, 30_000);
 
-    // Setup recurring interval
-    intervalRef.current = setInterval(() => {
-      sync();
+    const interval = setInterval(() => {
+      syncRef.current();
     }, intervalMinutes * 60 * 1000);
 
     return () => {
       clearTimeout(initialTimeout);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      clearInterval(interval);
     };
-  }, [enabled, session?.accessToken, intervalMinutes, sync]);
+  }, [enabled, session?.accessToken, intervalMinutes]);
 
   // This component doesn't render anything visible
   return null;
 }
-

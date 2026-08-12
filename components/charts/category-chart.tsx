@@ -35,7 +35,9 @@ export function CategoryChart({ data, currency = "CRC" }: CategoryChartProps) {
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className="h-80">
+    <div className="flex flex-col">
+      {/* Fixed-height chart area so the legend below never overlaps it */}
+      <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -79,10 +81,11 @@ export function CategoryChart({ data, currency = "CRC" }: CategoryChartProps) {
           />
         </PieChart>
       </ResponsiveContainer>
+      </div>
 
       {/* Legend */}
       <div className="mt-4 grid grid-cols-2 gap-2">
-        {chartData.slice(0, 6).map((item) => (
+        {chartData.slice(0, 8).map((item) => (
           <div key={item.name} className="flex items-center gap-2 text-sm">
             <div
               className="w-3 h-3 rounded-full"

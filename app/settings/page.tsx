@@ -40,13 +40,8 @@ export default function SettingsPage() {
 
     setClearing(true);
     try {
-      // Clear IndexedDB
-      const databases = await indexedDB.databases();
-      for (const db of databases) {
-        if (db.name) {
-          indexedDB.deleteDatabase(db.name);
-        }
-      }
+      // Clear only this app's IndexedDB database
+      indexedDB.deleteDatabase("expense-tracker");
       alert("Datos eliminados correctamente. La página se recargará.");
       window.location.reload();
     } catch (error) {
@@ -84,7 +79,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
                 <img
-                  src={session?.user?.image || "/default-avatar.png"}
+                  src={session?.user?.image || "/default-avatar.svg"}
                   alt="Avatar"
                   className="w-16 h-16 rounded-full"
                 />
@@ -127,8 +122,11 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-white font-medium">Almacenamiento local</p>
                     <p className="text-dark-400 text-sm mt-1">
-                      Tus transacciones se guardan únicamente en este navegador usando IndexedDB.
-                      No enviamos tus datos financieros a ningún servidor.
+                      Tus transacciones se guardan únicamente en este navegador
+                      usando IndexedDB. Para categorizar automáticamente, solo el
+                      nombre del comercio y el monto se envían al servicio de IA
+                      (Groq); no almacenamos tus datos financieros en ningún
+                      servidor.
                     </p>
                   </div>
                 </div>
@@ -166,7 +164,7 @@ export default function SettingsPage() {
 
               <div className="flex flex-wrap gap-3 pt-4 border-t border-dark-700">
                 <a
-                  href="https://github.com"
+                  href="https://github.com/menesesariel/finabanca"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-dark-400 hover:text-white transition-colors"

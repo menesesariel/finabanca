@@ -131,15 +131,15 @@ function parseDateTime(
     }
   }
 
-  const date = new Date(
-    parseInt(year, 10),
-    parseInt(month, 10) - 1,
-    parseInt(day, 10),
-    hours,
+  // The bank timestamps are in Costa Rica local time (UTC-6, no DST). Build the
+  // instant with an explicit offset so it does NOT depend on the server's
+  // timezone (Vercel runs in UTC, which would otherwise shift the time 6h).
+  const pad = (n: number | string) => String(n).padStart(2, "0");
+  const iso = `${year}-${pad(month)}-${pad(day)}T${pad(hours)}:${pad(
     minutes
-  );
+  )}:00-06:00`;
 
-  return date.toISOString();
+  return new Date(iso).toISOString();
 }
 
 // Test if email is from DAVIbank or Scotiabank (same format)

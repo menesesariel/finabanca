@@ -23,13 +23,21 @@ Reglas:
 1. confidence debe ser un número entre 0 y 100
 2. Si no estás seguro (< 70%), usa "other" como categoryId
 3. Algunos ejemplos:
-   - UBER EATS, RAPPI, DIDI FOOD → food
-   - UBER, DIDI, taxi → transport
-   - NETFLIX, SPOTIFY, DISNEY → entertainment
-   - WALMART, AUTOMERCADO, PRICESMART → supermarket
-   - FARMACIA, HOSPITAL, CLINICA → health
-   - AMAZON, TIENDA, STORE → shopping
-   - ICE, KOLBI, LIBERTY → services`;
+   - UBER EATS, RAPPI, DIDI FOOD, restaurantes, sodas, cafés → food
+   - WALMART, AUTOMERCADO, PRICESMART, MASxMENOS, PALI → supermarket
+   - UBER, DIDI, taxi, bus, peajes, parqueos → transport
+   - gasolineras, DELTA, UNO, gasolina, combustible → fuel
+   - ICE, AyA, CNFL, agua, luz, recibo, internet fijo → utilities
+   - alquiler, renta, condominio, mantenimiento del hogar → housing
+   - FARMACIA, HOSPITAL, CLINICA, doctor, laboratorio → health
+   - cines, bares, conciertos, juegos, streaming puntual → entertainment
+   - NETFLIX, SPOTIFY, DISNEY+, HBO, apps y software recurrente → subscriptions
+   - AMAZON, ropa, tiendas, tecnología, muebles → shopping
+   - EPA, CONSTRUPLAZA, ferretería, materiales, herramientas → hardware
+   - barbería, salón, spa, cosméticos, gimnasio → personal_care
+   - universidad, colegio, cursos, libros → education
+   - veterinaria, alimento para mascotas, PETSTORE → pets
+   - KOLBI, LIBERTY, telefonía móvil, seguros, notarios → services`;
 
 export async function categorizeTransaction(
   merchant: string,
@@ -89,12 +97,20 @@ Responde solo con JSON.`;
 function validateCategoryId(id: unknown): CategoryId {
   const validIds: CategoryId[] = [
     "food",
-    "transport",
-    "entertainment",
-    "shopping",
-    "services",
-    "health",
     "supermarket",
+    "transport",
+    "fuel",
+    "utilities",
+    "housing",
+    "health",
+    "entertainment",
+    "subscriptions",
+    "shopping",
+    "hardware",
+    "personal_care",
+    "education",
+    "pets",
+    "services",
     "other",
   ];
 

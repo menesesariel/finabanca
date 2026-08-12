@@ -81,7 +81,7 @@ export function Navbar() {
         <div className="p-4 border-t border-dark-700/50">
           <div className="flex items-center gap-3 px-4 py-3">
             <img
-              src={session.user?.image || "/default-avatar.png"}
+              src={session.user?.image || "/default-avatar.svg"}
               alt="Avatar"
               className="w-10 h-10 rounded-full"
             />

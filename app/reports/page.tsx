@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { CurrencyToggle } from "@/components/ui/currency-toggle";
 import { CategoryChart } from "@/components/charts/category-chart";
 import { DailyChart } from "@/components/charts/daily-chart";
 import { TransactionList } from "@/components/transactions/transaction-list";
@@ -13,6 +14,13 @@ import { getAllTransactions } from "@/lib/db";
 import { Transaction, CategoryId } from "@/lib/types";
 import { CATEGORIES } from "@/lib/categories";
 import { formatCurrency } from "@/lib/utils";
+import {
+  getCurrencies,
+  getPrimaryCurrency,
+  filterByCurrency,
+  totalForCurrency,
+  categoryTotals as categoryTotalsFor,
+} from "@/lib/stats";
 import {
   getAvailableMonths,
   getMonthRange,
@@ -23,12 +31,11 @@ import {
 } from "@/lib/month-utils";
 import {
   TrendingUp,
-  TrendingDown,
   Calendar,
-  CreditCard,
   Minus,
   ArrowUpRight,
   ArrowDownRight,
+  CreditCard,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +46,7 @@ export default function ReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | "all">("all");
+  const [currency, setCurrency] = useState<string>("CRC");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +59,9 @@ export default function ReportsPage() {
     try {
       const txns = await getAllTransactions();
       setAllTransactions(txns);
+      setCurrency((prev) =>
+        getCurrencies(txns).includes(prev) ? prev : getPrimaryCurrency(txns)
+      );
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -58,13 +69,18 @@ export default function ReportsPage() {
     }
   };
 
-  // Get available months from transactions
+  const currencies = useMemo(
+    () => getCurrencies(allTransactions),
+    [allTransactions]
+  );
+
+  // Available months from transactions
   const availableMonths = useMemo(() => {
     const dates = allTransactions.map((t) => t.transactionDate);
     return getAvailableMonths(dates);
   }, [allTransactions]);
 
-  // Filter transactions for selected month
+  // Transactions for the selected month (all currencies)
   const monthTransactionsAll = useMemo(() => {
     const { start, end } = getMonthRange(selectedMonth);
     return allTransactions.filter((t) => {
@@ -73,107 +89,67 @@ export default function ReportsPage() {
     });
   }, [allTransactions, selectedMonth]);
 
-  // Filter by category
+  // Transactions shown in the list (respect category filter, keep all currencies
+  // so each row renders in its own currency)
   const monthTransactions = useMemo(() => {
     if (selectedCategory === "all") return monthTransactionsAll;
     return monthTransactionsAll.filter((t) => t.categoryId === selectedCategory);
   }, [monthTransactionsAll, selectedCategory]);
 
-  // Calculate stats for selected month - SEPARATED BY CURRENCY
+  // Stats for the selected month, scoped to the selected currency (never mixed)
   const monthStats = useMemo(() => {
     const daysInMonth = getDaysInMonth(selectedMonth);
+    const inCurrency = filterByCurrency(monthTransactionsAll, currency);
 
-    // Separate by currency
-    const byCurrency: Record<string, { total: number; count: number }> = {};
-    monthTransactionsAll.forEach((t) => {
-      if (!byCurrency[t.currency]) {
-        byCurrency[t.currency] = { total: 0, count: 0 };
-      }
-      byCurrency[t.currency].total += t.amount;
-      byCurrency[t.currency].count += 1;
-    });
+    const total = totalForCurrency(monthTransactionsAll, currency);
+    const byCategory = categoryTotalsFor(monthTransactionsAll, currency);
 
-    // Category totals (separate by currency too)
-    const byCategory: Record<CategoryId, Record<string, number>> = {} as Record<CategoryId, Record<string, number>>;
-    monthTransactionsAll.forEach((t) => {
-      if (!byCategory[t.categoryId]) {
-        byCategory[t.categoryId] = {};
-      }
-      byCategory[t.categoryId][t.currency] = (byCategory[t.categoryId][t.currency] || 0) + t.amount;
-    });
-
-    // Category totals for chart (only CRC for simplicity in pie chart)
-    const byCategoryCRC: Record<CategoryId, number> = {} as Record<CategoryId, number>;
-    monthTransactionsAll.filter(t => t.currency === "CRC").forEach((t) => {
-      byCategoryCRC[t.categoryId] = (byCategoryCRC[t.categoryId] || 0) + t.amount;
-    });
-
-    // Top category by CRC
-    const topCategoryId = Object.entries(byCategoryCRC)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] as CategoryId | undefined;
+    const topCategoryId = Object.entries(byCategory).sort(
+      (a, b) => b[1] - a[1]
+    )[0]?.[0] as CategoryId | undefined;
 
     return {
-      byCurrency,
-      totalCRC: byCurrency["CRC"]?.total || 0,
-      totalUSD: byCurrency["USD"]?.total || 0,
-      countCRC: byCurrency["CRC"]?.count || 0,
-      countUSD: byCurrency["USD"]?.count || 0,
-      count: monthTransactionsAll.length,
-      averageDailyCRC: (byCurrency["CRC"]?.total || 0) / daysInMonth,
-      averageDailyUSD: (byCurrency["USD"]?.total || 0) / daysInMonth,
+      total,
+      count: inCurrency.length,
+      averageDaily: total / daysInMonth,
       byCategory,
-      byCategoryCRC,
       topCategory: topCategoryId ? CATEGORIES[topCategoryId] : null,
-      topCategoryAmount: topCategoryId ? byCategoryCRC[topCategoryId] : 0,
+      topCategoryAmount: topCategoryId ? byCategory[topCategoryId] : 0,
     };
-  }, [monthTransactionsAll, selectedMonth]);
+  }, [monthTransactionsAll, selectedMonth, currency]);
 
-  // Calculate previous month stats for comparison
-  const prevMonthStats = useMemo(() => {
+  // Previous month total (selected currency) for comparison
+  const prevMonthTotal = useMemo(() => {
     const prevMonthKey = getPreviousMonth(selectedMonth);
     const { start, end } = getMonthRange(prevMonthKey);
     const prevTransactions = allTransactions.filter((t) => {
       const date = new Date(t.transactionDate);
       return date >= start && date <= end;
     });
-    
-    const totalCRC = prevTransactions.filter(t => t.currency === "CRC").reduce((sum, t) => sum + t.amount, 0);
-    const totalUSD = prevTransactions.filter(t => t.currency === "USD").reduce((sum, t) => sum + t.amount, 0);
-    
-    return { totalCRC, totalUSD, count: prevTransactions.length };
-  }, [allTransactions, selectedMonth]);
+    return totalForCurrency(prevTransactions, currency);
+  }, [allTransactions, selectedMonth, currency]);
 
-  // Calculate change percentage (CRC only for now)
-  const changePercentCRC = useMemo(() => {
-    if (prevMonthStats.totalCRC === 0) return null;
-    return ((monthStats.totalCRC - prevMonthStats.totalCRC) / prevMonthStats.totalCRC) * 100;
-  }, [monthStats.totalCRC, prevMonthStats.totalCRC]);
+  const changePercent = useMemo(() => {
+    if (prevMonthTotal === 0) return null;
+    return ((monthStats.total - prevMonthTotal) / prevMonthTotal) * 100;
+  }, [monthStats.total, prevMonthTotal]);
 
-  const changePercentUSD = useMemo(() => {
-    if (prevMonthStats.totalUSD === 0) return null;
-    return ((monthStats.totalUSD - prevMonthStats.totalUSD) / prevMonthStats.totalUSD) * 100;
-  }, [monthStats.totalUSD, prevMonthStats.totalUSD]);
-
-  // Daily spending data for chart (CRC only for consistency)
+  // Daily spending data for chart (selected currency, filtered by category)
   const dailyData = useMemo(() => {
     const daysInMonth = getDaysInMonth(selectedMonth);
     const [year, month] = selectedMonth.split("-").map(Number);
 
     const dailyTotals: Record<number, number> = {};
-
-    // Initialize all days to 0
     for (let day = 1; day <= daysInMonth; day++) {
       dailyTotals[day] = 0;
     }
 
-    // Sum transactions by day (CRC only, filtered by category if selected)
-    const filteredTxns = selectedCategory === "all" 
-      ? monthTransactionsAll.filter(t => t.currency === "CRC")
-      : monthTransactionsAll.filter(t => t.currency === "CRC" && t.categoryId === selectedCategory);
-    
+    const filteredTxns = filterByCurrency(monthTransactionsAll, currency).filter(
+      (t) => selectedCategory === "all" || t.categoryId === selectedCategory
+    );
+
     filteredTxns.forEach((t) => {
-      const date = new Date(t.transactionDate);
-      const day = date.getDate();
+      const day = new Date(t.transactionDate).getDate();
       dailyTotals[day] = (dailyTotals[day] || 0) + t.amount;
     });
 
@@ -182,41 +158,30 @@ export default function ReportsPage() {
       amount,
       date: new Date(year, month - 1, parseInt(day)).toISOString(),
     }));
-  }, [monthTransactionsAll, selectedMonth, selectedCategory]);
+  }, [monthTransactionsAll, selectedMonth, selectedCategory, currency]);
 
-  // Get highest spending day
   const highestDay = useMemo(() => {
     if (dailyData.length === 0) return null;
     return dailyData.reduce((max, d) => (d.amount > max.amount ? d : max), dailyData[0]);
   }, [dailyData]);
 
-  // Filter transactions by selected day
+  // Transactions for the selected day (all currencies, rows render their own)
   const dayTransactions = useMemo(() => {
     if (selectedDay === null) return [];
-    return monthTransactions.filter((t) => {
-      const date = new Date(t.transactionDate);
-      return date.getDate() === selectedDay;
-    });
+    return monthTransactions.filter(
+      (t) => new Date(t.transactionDate).getDate() === selectedDay
+    );
   }, [monthTransactions, selectedDay]);
 
-  // Handle day click from chart
-  const handleDayClick = (date: string, day: number) => {
-    setSelectedDay(day);
-  };
+  const handleDayClick = (_date: string, day: number) => setSelectedDay(day);
+  const clearDaySelection = () => setSelectedDay(null);
 
-  // Clear day selection
-  const clearDaySelection = () => {
-    setSelectedDay(null);
-  };
-
-  // Reset selections when month changes
   const handleMonthChange = (newMonth: string) => {
     setSelectedMonth(newMonth);
     setSelectedDay(null);
     setSelectedCategory("all");
   };
 
-  // Handle category change
   const handleCategoryChange = (category: CategoryId | "all") => {
     setSelectedCategory(category);
     setSelectedDay(null);
@@ -240,20 +205,22 @@ export default function ReportsPage() {
 
       <main className="md:ml-64 p-4 md:p-8 pt-20 md:pt-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white">
               Reporte Mensual
             </h1>
-            <p className="text-dark-400 mt-1">
-              Análisis detallado de tus gastos
-            </p>
+            <p className="text-dark-400 mt-1">Análisis detallado de tus gastos</p>
           </div>
 
           {/* Filters row */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            {/* Month selector */}
-            <div className="w-full sm:w-48">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto">
+            <CurrencyToggle
+              currencies={currencies}
+              value={currency}
+              onChange={setCurrency}
+            />
+            <div className="w-full sm:w-44">
               <Select
                 value={selectedMonth}
                 onChange={(e) => handleMonthChange(e.target.value)}
@@ -263,8 +230,7 @@ export default function ReportsPage() {
                 }))}
               />
             </div>
-            {/* Category filter */}
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-52">
               <Select
                 value={selectedCategory}
                 onChange={(e) => handleCategoryChange(e.target.value as CategoryId | "all")}
@@ -280,112 +246,91 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Stats cards - Separated by currency */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Total CRC */}
+        {/* Stats cards (selected currency) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Total */}
           <Card className="p-6 animate-slide-up" style={{ animationDelay: "0ms" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-dark-400 text-sm">Total Colones (₡)</p>
-                <p className="text-2xl font-bold text-white mt-1">
-                  {formatCurrency(monthStats.totalCRC, "CRC")}
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-dark-400 text-sm">Total del mes</p>
+                <p className="text-2xl font-bold text-white mt-1 truncate">
+                  {formatCurrency(monthStats.total, currency)}
                 </p>
               </div>
-              <div className="p-3 rounded-xl bg-primary-500/10">
-                <span className="text-xl">₡</span>
+              <div className="shrink-0 p-3 rounded-xl bg-primary-500/10">
+                <span className="text-xl">{currency === "USD" ? "$" : "₡"}</span>
               </div>
             </div>
-            {changePercentCRC !== null && (
+            {changePercent !== null && (
               <div className="flex items-center gap-1 mt-2">
-                {changePercentCRC > 0 ? (
+                {changePercent > 0 ? (
                   <ArrowUpRight className="w-4 h-4 text-red-400" />
-                ) : changePercentCRC < 0 ? (
+                ) : changePercent < 0 ? (
                   <ArrowDownRight className="w-4 h-4 text-green-400" />
                 ) : (
                   <Minus className="w-4 h-4 text-dark-400" />
                 )}
                 <span
                   className={`text-sm ${
-                    changePercentCRC > 0
+                    changePercent > 0
                       ? "text-red-400"
-                      : changePercentCRC < 0
+                      : changePercent < 0
                       ? "text-green-400"
                       : "text-dark-400"
                   }`}
                 >
-                  {changePercentCRC > 0 ? "+" : ""}
-                  {changePercentCRC.toFixed(1)}% vs mes anterior
+                  {changePercent > 0 ? "+" : ""}
+                  {changePercent.toFixed(1)}% vs mes anterior
                 </span>
               </div>
             )}
-            <p className="text-xs text-dark-500 mt-1">{monthStats.countCRC} transacciones</p>
           </Card>
 
-          {/* Total USD */}
+          {/* Count */}
           <Card className="p-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-dark-400 text-sm">Total Dólares ($)</p>
-                <p className="text-2xl font-bold text-white mt-1">
-                  {formatCurrency(monthStats.totalUSD, "USD")}
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-dark-400 text-sm">Transacciones</p>
+                <p className="text-2xl font-bold text-white mt-1 truncate">
+                  {monthStats.count}
                 </p>
               </div>
-              <div className="p-3 rounded-xl bg-blue-500/10">
-                <span className="text-xl text-blue-400">$</span>
+              <div className="shrink-0 p-3 rounded-xl bg-blue-500/10">
+                <CreditCard className="w-6 h-6 text-blue-400" />
               </div>
             </div>
-            {changePercentUSD !== null && (
-              <div className="flex items-center gap-1 mt-2">
-                {changePercentUSD > 0 ? (
-                  <ArrowUpRight className="w-4 h-4 text-red-400" />
-                ) : changePercentUSD < 0 ? (
-                  <ArrowDownRight className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Minus className="w-4 h-4 text-dark-400" />
-                )}
-                <span
-                  className={`text-sm ${
-                    changePercentUSD > 0
-                      ? "text-red-400"
-                      : changePercentUSD < 0
-                      ? "text-green-400"
-                      : "text-dark-400"
-                  }`}
-                >
-                  {changePercentUSD > 0 ? "+" : ""}
-                  {changePercentUSD.toFixed(1)}% vs mes anterior
-                </span>
-              </div>
-            )}
-            <p className="text-xs text-dark-500 mt-1">{monthStats.countUSD} transacciones</p>
+            <p className="text-sm mt-2 text-dark-400">
+              en {currency === "USD" ? "dólares" : "colones"}
+            </p>
           </Card>
 
-          {/* Promedio diario CRC */}
+          {/* Average daily */}
           <Card className="p-6 animate-slide-up" style={{ animationDelay: "200ms" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-dark-400 text-sm">Promedio diario ₡</p>
-                <p className="text-2xl font-bold text-white mt-1">
-                  {formatCurrency(monthStats.averageDailyCRC, "CRC")}
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-dark-400 text-sm">Promedio diario</p>
+                <p className="text-2xl font-bold text-white mt-1 truncate">
+                  {formatCurrency(monthStats.averageDaily, currency)}
                 </p>
               </div>
-              <div className="p-3 rounded-xl bg-purple-500/10">
+              <div className="shrink-0 p-3 rounded-xl bg-purple-500/10">
                 <TrendingUp className="w-6 h-6 text-purple-400" />
               </div>
             </div>
             <p className="text-sm mt-2 text-dark-400">
-              {getDaysInMonth(selectedMonth)} días • {monthStats.count} transacciones
+              {getDaysInMonth(selectedMonth)} días
             </p>
           </Card>
 
-          {/* Categoría principal */}
+          {/* Top category */}
           <Card className="p-6 animate-slide-up" style={{ animationDelay: "300ms" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-dark-400 text-sm">Mayor gasto (₡)</p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-dark-400 text-sm">Mayor gasto</p>
                 {monthStats.topCategory ? (
-                  <p className="text-2xl font-bold text-white mt-1">
-                    {monthStats.topCategory.icon} {monthStats.topCategory.name.split(" ")[0]}
+                  <p className="text-2xl font-bold text-white mt-1 truncate">
+                    {monthStats.topCategory.icon}{" "}
+                    {monthStats.topCategory.name.split(" ")[0]}
                   </p>
                 ) : (
                   <p className="text-2xl font-bold text-dark-500 mt-1">-</p>
@@ -393,17 +338,17 @@ export default function ReportsPage() {
               </div>
               {monthStats.topCategory && (
                 <div
-                  className="p-3 rounded-xl"
+                  className="shrink-0 p-3 rounded-xl"
                   style={{ backgroundColor: `${monthStats.topCategory.color}20` }}
                 >
                   <span className="text-2xl">{monthStats.topCategory.icon}</span>
                 </div>
               )}
             </div>
-            {monthStats.topCategoryAmount > 0 && monthStats.totalCRC > 0 && (
+            {monthStats.topCategoryAmount > 0 && monthStats.total > 0 && (
               <p className="text-sm mt-2 text-dark-400">
-                {formatCurrency(monthStats.topCategoryAmount, "CRC")} (
-                {((monthStats.topCategoryAmount / monthStats.totalCRC) * 100).toFixed(0)}%)
+                {formatCurrency(monthStats.topCategoryAmount, currency)} (
+                {((monthStats.topCategoryAmount / monthStats.total) * 100).toFixed(0)}%)
               </p>
             )}
           </Card>
@@ -411,14 +356,14 @@ export default function ReportsPage() {
 
         {/* Charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Daily chart */}
           <Card className="animate-slide-up" style={{ animationDelay: "400ms" }}>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+              <CardTitle className="flex flex-wrap items-center justify-between gap-2">
                 <span>Gasto por Día</span>
                 {highestDay && highestDay.amount > 0 && (
                   <span className="text-sm font-normal text-dark-400">
-                    Día más alto: {highestDay.day} ({formatCurrency(highestDay.amount)})
+                    Día más alto: {highestDay.day} (
+                    {formatCurrency(highestDay.amount, currency)})
                   </span>
                 )}
               </CardTitle>
@@ -429,14 +374,14 @@ export default function ReportsPage() {
               ) : (
                 <DailyChart
                   data={dailyData}
-                  averageDaily={monthStats.averageDailyCRC}
+                  averageDaily={monthStats.averageDaily}
+                  currency={currency}
                   onDayClick={handleDayClick}
                 />
               )}
             </CardContent>
           </Card>
 
-          {/* Category chart */}
           <Card className="animate-slide-up" style={{ animationDelay: "500ms" }}>
             <CardHeader>
               <CardTitle>Gastos por Categoría</CardTitle>
@@ -445,7 +390,7 @@ export default function ReportsPage() {
               {loading ? (
                 <div className="h-80 animate-shimmer rounded-lg" />
               ) : (
-                <CategoryChart data={monthStats.byCategoryCRC} />
+                <CategoryChart data={monthStats.byCategory} currency={currency} />
               )}
             </CardContent>
           </Card>
@@ -462,8 +407,8 @@ export default function ReportsPage() {
                     Día {selectedDay} de {formatMonthLabel(selectedMonth)}
                   </CardTitle>
                   <p className="text-dark-400 text-sm mt-1">
-                    {dayTransactions.length} transacción{dayTransactions.length !== 1 ? "es" : ""} • 
-                    Total: {formatCurrency(dayTransactions.reduce((sum, t) => sum + t.amount, 0))}
+                    {dayTransactions.length} transacción
+                    {dayTransactions.length !== 1 ? "es" : ""}
                   </p>
                 </>
               ) : (
@@ -506,4 +451,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-
