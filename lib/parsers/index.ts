@@ -1,5 +1,6 @@
 import { EmailParseResult } from "../types";
 import { parseDavibankEmail, isDavibankEmail } from "./davibank";
+import { parseBacEmail, isBacEmail } from "./bac";
 
 interface EmailData {
   id: string;
@@ -23,12 +24,11 @@ const BANK_PARSERS: {
     check: isDavibankEmail,
     parse: parseDavibankEmail,
   },
-  // Add more banks here:
-  // {
-  //   name: "BAC",
-  //   check: isBacEmail,
-  //   parse: parseBacEmail,
-  // },
+  {
+    name: "BAC Credomatic",
+    check: isBacEmail,
+    parse: parseBacEmail,
+  },
 ];
 
 /**
@@ -63,4 +63,5 @@ export function getSupportedBanks(): string[] {
 }
 
 export { parseDavibankEmail, isDavibankEmail };
+export { parseBacEmail, isBacEmail };
 

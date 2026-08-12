@@ -25,7 +25,11 @@ export async function GET(request: NextRequest) {
     const emails = await listBankEmails(session.accessToken, {
       maxResults,
       afterDate,
-      bankEmails: ["Alertas@davibank.cr", "AlertasScotiabank@scotiabank.com"],
+      bankEmails: [
+        "Alertas@davibank.cr",
+        "AlertasScotiabank@scotiabank.com",
+        "notificacion@baccredomatic.cr",
+      ],
     });
 
     // Parse each email

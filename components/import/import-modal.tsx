@@ -67,7 +67,11 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
   const { data: session } = useSession();
   const [step, setStep] = useState<ImportStep>("config");
   const [selectedRange, setSelectedRange] = useState("last-month");
-  const [selectedSenders, setSelectedSenders] = useState<string[]>(["Alertas@davibank.cr", "AlertasScotiabank@scotiabank.com"]);
+  const [selectedSenders, setSelectedSenders] = useState<string[]>([
+    "Alertas@davibank.cr",
+    "AlertasScotiabank@scotiabank.com",
+    "notificacion@baccredomatic.cr",
+  ]);
   const [customSender, setCustomSender] = useState("");
   const [emails, setEmails] = useState<EmailResult[]>([]);
   const [progress, setProgress] = useState<ImportProgress>({ current: 0, total: 0 });

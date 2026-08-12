@@ -36,7 +36,11 @@ export async function listBankEmails(
 
   const {
     maxResults = 500,
-    bankEmails = ["Alertas@davibank.cr", "AlertasScotiabank@scotiabank.com"],
+    bankEmails = [
+      "Alertas@davibank.cr",
+      "AlertasScotiabank@scotiabank.com",
+      "notificacion@baccredomatic.cr",
+    ],
     afterDate,
     beforeDate,
   } = options;

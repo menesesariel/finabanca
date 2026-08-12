@@ -28,9 +28,9 @@ export const KNOWN_BANK_SENDERS: BankSender[] = [
   {
     id: "bac",
     bank: "BAC Credomatic",
-    email: "notificaciones@baccredomatic.com",
+    email: "notificacion@baccredomatic.cr",
     country: "CR",
-    hasParser: false,
+    hasParser: true,
   },
   {
     id: "bn",

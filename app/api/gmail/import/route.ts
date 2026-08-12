@@ -18,7 +18,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { 
-      senders = ["Alertas@davibank.cr", "AlertasScotiabank@scotiabank.com"], 
+      senders = [
+        "Alertas@davibank.cr",
+        "AlertasScotiabank@scotiabank.com",
+        "notificacion@baccredomatic.cr",
+      ],
       startDate, 
       endDate,
       maxResults = 500 
