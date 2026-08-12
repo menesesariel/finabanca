@@ -137,7 +137,8 @@ export function ImportModal({ isOpen, onClose, onComplete }: ImportModalProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Error searching emails");
+        // Surface the real server detail (e.g. "Insufficient Permission").
+        throw new Error(data.details || data.error || "Error searching emails");
       }
 
       setEmails(data.emails || []);
